@@ -1,0 +1,14 @@
+# binaries
+/gokv
+/bin/
+
+# test & coverage output
+*.out
+*.test
+
+# snapshot files the store will write
+*.gob
+/data/
+
+# macOS
+.DS_Store

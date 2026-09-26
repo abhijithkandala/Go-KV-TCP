@@ -15,9 +15,9 @@ func NewMutexStore() *MutexStore {
 
 func (s *MutexStore) Set(key, value string) {
 	s.mu.Lock()
+	defer s.mu.Unlock()
 	s.data[key] = value
-	s.mu.Unlock()
-	return
+
 }
 
 func (s *MutexStore) Get(key string) (string, error) {

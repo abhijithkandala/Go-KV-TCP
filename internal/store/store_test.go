@@ -2,6 +2,8 @@ package store
 
 import (
 	"errors"
+	"fmt"
+	"sync"
 	"testing"
 )
 
@@ -72,5 +74,32 @@ func TestEmptyValueIsNotMissing(t *testing.T) {
 	}
 	if got != "" {
 		t.Errorf("got %q, want empty string", got)
+	}
+}
+
+func TestConcurrentSet(t *testing.T) {
+	s := NewMutexStore()
+	var wg sync.WaitGroup
+	for i := 0; i < 100; i++ {
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			key := fmt.Sprintf("Abhijith%d", i)
+			val := fmt.Sprintf("Reddy%d", i)
+			s.Set(key, val)
+		}()
+	}
+	wg.Wait()
+
+	for i := 0; i < 100; i++ {
+		key := fmt.Sprintf("Abhijith%d", i)
+		got, err := s.Get(key)
+		if err != nil {
+			t.Errorf("%s: unexpected error: %v", key, err)
+		}
+		val := fmt.Sprintf("Reddy%d", i)
+		if got != val {
+			t.Errorf("%s: got %q, want %q", key, got, val)
+		}
 	}
 }

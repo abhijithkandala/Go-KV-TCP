@@ -7,8 +7,12 @@ import (
 	"testing"
 )
 
+func newStore() Store {
+	return NewMutexStore()
+}
+
 func TestSetAndGet(t *testing.T) {
-	s := NewMutexStore()
+	s := newStore()
 	s.Set("foo", "bar")
 
 	got, err := s.Get("foo")
@@ -21,7 +25,7 @@ func TestSetAndGet(t *testing.T) {
 }
 
 func TestGetMissingKey(t *testing.T) {
-	s := NewMutexStore()
+	s := newStore()
 
 	_, err := s.Get("nope")
 	if !errors.Is(err, ErrEntryNotFound) {
@@ -30,7 +34,7 @@ func TestGetMissingKey(t *testing.T) {
 }
 
 func TestSetOverwrites(t *testing.T) {
-	s := NewMutexStore()
+	s := newStore()
 	s.Set("foo", "bar")
 	s.Set("foo", "baz")
 
@@ -44,7 +48,7 @@ func TestSetOverwrites(t *testing.T) {
 }
 
 func TestDelExistingKey(t *testing.T) {
-	s := NewMutexStore()
+	s := newStore()
 	s.Set("foo", "bar")
 
 	if err := s.Del("foo"); err != nil {
@@ -57,7 +61,7 @@ func TestDelExistingKey(t *testing.T) {
 }
 
 func TestDelMissingKey(t *testing.T) {
-	s := NewMutexStore()
+	s := newStore()
 
 	if err := s.Del("nope"); !errors.Is(err, ErrEntryNotFound) {
 		t.Errorf("got %v, want ErrEntryNotFound", err)
@@ -65,7 +69,7 @@ func TestDelMissingKey(t *testing.T) {
 }
 
 func TestEmptyValueIsNotMissing(t *testing.T) {
-	s := NewMutexStore()
+	s := newStore()
 	s.Set("k", "")
 
 	got, err := s.Get("k")
@@ -78,7 +82,7 @@ func TestEmptyValueIsNotMissing(t *testing.T) {
 }
 
 func TestConcurrentSet(t *testing.T) {
-	s := NewMutexStore()
+	s := newStore()
 	var wg sync.WaitGroup
 	for i := 0; i < 100; i++ {
 		wg.Add(1)

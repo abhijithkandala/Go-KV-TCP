@@ -8,7 +8,7 @@ import (
 )
 
 func newStore() Store {
-	return NewMutexStore()
+	return NewActorStore()
 }
 
 func TestSetAndGet(t *testing.T) {

@@ -1,14 +1,20 @@
 package server
 
 import (
-	"bufio"
+	"fmt"
 	"net"
 	"strings"
 
+	"github.com/abhikred/go-kv/internal/resp"
 	"github.com/abhikred/go-kv/internal/store"
 )
 
-const errWrongArgs = "ERR wrong number of arguments\n"
+const (
+	errWrongArgs      = "-ERR wrong number of arguments\r\n"
+	errUnknownCommand = "-ERR unknown command\r\n"
+	replyOK           = "+OK\r\n"
+	replyNil          = "$-1\r\n"
+)
 
 func ListenAndServe(addr string, s store.Store) error {
 	ln, err := net.Listen("tcp", addr)
@@ -27,21 +33,20 @@ func ListenAndServe(addr string, s store.Store) error {
 }
 func handleConn(conn net.Conn, s store.Store) {
 	defer conn.Close()
-	scanner := bufio.NewScanner(conn)
-	for scanner.Scan() {
-		line := scanner.Text()
-		parts := strings.Fields(line)
-		if len(parts) == 0 {
-			continue
+	reader := resp.NewReader(conn)
+	for {
+		parts, err := reader.ReadCommand()
+		if err != nil {
+			return
 		}
-		switch parts[0] {
+		switch strings.ToUpper(parts[0]) {
 		case "GET":
 			if len(parts) == 2 {
 				res, err := s.Get(parts[1])
 				if err != nil {
-					conn.Write([]byte(err.Error() + "\n"))
+					conn.Write([]byte(replyNil))
 				} else {
-					conn.Write([]byte(res + "\n"))
+					fmt.Fprintf(conn, "$%d\r\n%s\r\n", len(res), res)
 				}
 			} else {
 				conn.Write([]byte(errWrongArgs))
@@ -49,25 +54,22 @@ func handleConn(conn net.Conn, s store.Store) {
 		case "SET":
 			if len(parts) == 3 {
 				s.Set(parts[1], parts[2])
-				conn.Write([]byte("ok\n"))
+				conn.Write([]byte(replyOK))
 			} else {
 				conn.Write([]byte(errWrongArgs))
 			}
 		case "DEL":
 			if len(parts) == 2 {
-				err := s.Del(parts[1])
-				if err != nil {
-					conn.Write([]byte(err.Error() + "\n"))
+				if err := s.Del(parts[1]); err != nil {
+					conn.Write([]byte(":0\r\n"))
 				} else {
-					conn.Write([]byte("ok\n"))
+					conn.Write([]byte(":1\r\n"))
 				}
 			} else {
 				conn.Write([]byte(errWrongArgs))
 			}
 		default:
-			res := "Unknown Request"
-			conn.Write([]byte(res + "\n"))
+			conn.Write([]byte(errUnknownCommand))
 		}
 	}
-
 }

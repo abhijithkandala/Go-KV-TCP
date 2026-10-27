@@ -12,39 +12,46 @@ type request struct {
 }
 type ActorStore struct {
 	request chan request
+	done    chan struct{}
 }
 
 func NewActorStore() *ActorStore {
 	ch := make(chan request)
-	ac := &ActorStore{ch}
-	go run(ch)
+	done := make(chan struct{})
+	ac := &ActorStore{request: ch, done: done}
+	go run(ch, done)
 	return ac
 }
 
-func run(requests chan request) {
+func run(requests chan request, done chan struct{}) {
 	mp := make(map[string]string)
-	for req := range requests {
-		switch req.op {
-		case "get":
-			val, ok := mp[req.key]
-			if !ok {
-				req.reply <- reply{err: ErrEntryNotFound}
-			} else {
-				req.reply <- reply{value: val}
-			}
-		case "set":
-			mp[req.key] = req.value
-			req.reply <- reply{}
-		case "del":
-			_, ok := mp[req.key]
-			if !ok {
-				req.reply <- reply{err: ErrEntryNotFound}
-			} else {
-				delete(mp, req.key)
+	for {
+		select {
+		case req := <-requests:
+			switch req.op {
+			case "get":
+				val, ok := mp[req.key]
+				if !ok {
+					req.reply <- reply{err: ErrEntryNotFound}
+				} else {
+					req.reply <- reply{value: val}
+				}
+			case "set":
+				mp[req.key] = req.value
 				req.reply <- reply{}
+			case "del":
+				_, ok := mp[req.key]
+				if !ok {
+					req.reply <- reply{err: ErrEntryNotFound}
+				} else {
+					delete(mp, req.key)
+					req.reply <- reply{}
+				}
+			default:
+				req.reply <- reply{err: ErrUnknownOperation}
 			}
-		default:
-			req.reply <- reply{err: ErrUnknownOperation}
+		case <-done:
+			return
 		}
 	}
 }
@@ -69,6 +76,9 @@ func (as *ActorStore) Del(key string) error {
 	as.request <- req
 	rep := <-rc
 	return rep.err
+}
+func (as *ActorStore) Close() {
+	close(as.done)
 }
 
 var _ Store = (*ActorStore)(nil)

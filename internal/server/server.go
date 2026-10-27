@@ -1,9 +1,12 @@
 package server
 
 import (
+	"context"
 	"fmt"
 	"net"
 	"strings"
+	"sync"
+	"time"
 
 	"github.com/abhikred/go-kv/internal/resp"
 	"github.com/abhikred/go-kv/internal/store"
@@ -16,25 +19,46 @@ const (
 	replyNil          = "$-1\r\n"
 )
 
-func ListenAndServe(addr string, s store.Store) error {
+const idleTimeout = 5 * time.Minute
+
+func ListenAndServe(ctx context.Context, addr string, s store.Store) error {
 	ln, err := net.Listen("tcp", addr)
 	if err != nil {
 		return err
 	}
 	defer ln.Close()
+	var wg sync.WaitGroup
+	go func() {
+		<-ctx.Done()
+		ln.Close()
+	}()
+	var connErr error
 	for {
-		conn, err := ln.Accept()
-		if err != nil {
-			return err
+		conn, connAcceptErr := ln.Accept()
+		if connAcceptErr != nil {
+			connErr = connAcceptErr
+			break
 		}
-		go handleConn(conn, s)
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			handleConn(ctx, conn, s)
+		}()
 	}
+	wg.Wait()
 
+	if ctx.Err() != nil {
+		return nil
+	}
+	return connErr
 }
-func handleConn(conn net.Conn, s store.Store) {
+func handleConn(ctx context.Context, conn net.Conn, s store.Store) {
 	defer conn.Close()
 	reader := resp.NewReader(conn)
 	for {
+		if err := conn.SetReadDeadline(time.Now().Add(idleTimeout)); err != nil {
+			return
+		}
 		parts, err := reader.ReadCommand()
 		if err != nil {
 			return
